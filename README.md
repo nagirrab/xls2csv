@@ -3,7 +3,10 @@ xls2csv
 
 Convert .xls and .xlsx files to csv using Apache POI.
 
-This is a simple wrapper around the basic implementations of both `.xls` and `.xlsx` parsing with a few fixes for off cases thrown in.
+This is a simple wrapper around the example implementations of both `.xls` and `.xlsx` parsing with a few fixes for handling of odd strings put in. The original source is here:
+
+  * [XLS](http://svn.apache.org/repos/asf/poi/trunk/src/examples/src/org/apache/poi/hssf/eventusermodel/examples/XLS2CSVmra.java)
+  * [XLSX](http://svn.apache.org/repos/asf/poi/trunk/src/examples/src/org/apache/poi/xssf/eventusermodel/XLSX2CSV.java)
 
 As it stands, it will take multiple sheets and append them to the same file, making what's technically an invalid file. 
 
