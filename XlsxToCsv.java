@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.io.OutputStream;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -339,7 +340,7 @@ public class XlsxToCsv {
 
     private OPCPackage xlsxPackage;
     private int minColumns;
-    private PrintStream output;
+    private OutputDispatcher dispatcher;
 
     /**
      * Creates a new XLSX -> CSV converter
@@ -348,9 +349,9 @@ public class XlsxToCsv {
      * @param output     The PrintStream to output the CSV to
      * @param minColumns The minimum number of columns to output, or -1 for no minimum
      */
-    public XlsxToCsv(OPCPackage pkg, PrintStream output, int minColumns) {
+    public XlsxToCsv(OPCPackage pkg, OutputDispatcher dispatcher, int minColumns) {
         this.xlsxPackage = pkg;
-        this.output = output;
+        this.dispatcher = dispatcher;
         this.minColumns = minColumns;
     }
 
@@ -365,14 +366,15 @@ public class XlsxToCsv {
     public void processSheet(
             StylesTable styles,
             ReadOnlySharedStringsTable strings,
-            InputStream sheetInputStream)
+            InputStream sheetInputStream,
+            PrintStream sheetOutputStream)
             throws IOException, ParserConfigurationException, SAXException {
 
         InputSource sheetSource = new InputSource(sheetInputStream);
         SAXParserFactory saxFactory = SAXParserFactory.newInstance();
         SAXParser saxParser = saxFactory.newSAXParser();
         XMLReader sheetParser = saxParser.getXMLReader();
-        ContentHandler handler = new MyXSSFSheetHandler(styles, strings, this.minColumns, this.output);
+        ContentHandler handler = new MyXSSFSheetHandler(styles, strings, this.minColumns, sheetOutputStream);
         sheetParser.setContentHandler(handler);
         sheetParser.parse(sheetSource);
     }
@@ -381,9 +383,9 @@ public class XlsxToCsv {
      * Initiates the processing of the XLS workbook file to CSV.
      *
      * @throws IOException
-     * @throws OpenXML4JException
-     * @throws ParserConfigurationException
-     * @throws SAXException
+     * @throws org.apache.poi.openxml4j.exceptions.OpenXML4JException
+     * @throws javax.xml.parsers.ParserConfigurationException
+     * @throws org.xml.sax.SAXException
      */
     public void process()
             throws IOException, OpenXML4JException, ParserConfigurationException, SAXException {
@@ -395,10 +397,9 @@ public class XlsxToCsv {
         int index = 0;
         while (iter.hasNext()) {
             InputStream stream = iter.next();
-            String sheetName = iter.getSheetName();
-            this.output.println();
-            this.output.println(sheetName + " [index=" + index + "]:");
-            processSheet(styles, strings, stream);
+            PrintStream output = dispatcher.openStreamForSheet(iter.getSheetName());
+            processSheet(styles, strings, stream, output);
+            dispatcher.closeStreamForSheet(output, iter.getSheetName());
             stream.close();
             ++index;
         }

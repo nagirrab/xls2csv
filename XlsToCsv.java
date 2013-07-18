@@ -54,7 +54,9 @@ import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 public class XlsToCsv implements HSSFListener {
     private int minColumns;
     private POIFSFileSystem fs;
-    private PrintStream output;
+    private OutputDispatcher dispatcher;
+    private PrintStream currentOutput = null;
+    private String currentSheetName = null;
 
     private int lastRowNumber;
     private int lastColumnNumber;
@@ -86,9 +88,9 @@ public class XlsToCsv implements HSSFListener {
      * @param output The PrintStream to output the CSV to
      * @param minColumns The minimum number of columns to output, or -1 for no minimum
      */
-    public XlsToCsv(POIFSFileSystem fs, PrintStream output, int minColumns) {
+    public XlsToCsv(POIFSFileSystem fs, OutputDispatcher dispatcher, int minColumns) {
         this.fs = fs;
-        this.output = output;
+        this.dispatcher = dispatcher;
         this.minColumns = minColumns;
     }
 
@@ -102,7 +104,7 @@ public class XlsToCsv implements HSSFListener {
     public XlsToCsv(String filename, int minColumns) throws IOException, FileNotFoundException {
         this(
                 new POIFSFileSystem(new FileInputStream(filename)),
-                System.out, minColumns
+                new StandardOutputDispatcher(), minColumns
         );
     }
 
@@ -113,10 +115,10 @@ public class XlsToCsv implements HSSFListener {
      * @throws IOException
      * @throws FileNotFoundException
      */
-    public XlsToCsv(String filename, PrintStream output, int minColumns) throws IOException, FileNotFoundException {
+    public XlsToCsv(String filename, OutputDispatcher dispatcher, int minColumns) throws IOException, FileNotFoundException {
         this(
                 new POIFSFileSystem(new FileInputStream(filename)),
-                output, minColumns
+                dispatcher, minColumns
         );
     }
 
@@ -157,6 +159,8 @@ public class XlsToCsv implements HSSFListener {
             case BOFRecord.sid:
                 BOFRecord br = (BOFRecord)record;
                 if(br.getType() == BOFRecord.TYPE_WORKSHEET) {
+
+
                     // Create sub workbook if required
                     if(workbookBuildingListener != null && stubWorkbook == null) {
                         stubWorkbook = workbookBuildingListener.getStubHSSFWorkbook();
@@ -167,14 +171,22 @@ public class XlsToCsv implements HSSFListener {
                     //  their BOFRecords, and then knowing that we
                     //  process BOFRecords in byte offset order
                     sheetIndex++;
+
                     if(orderedBSRs == null) {
                         orderedBSRs = BoundSheetRecord.orderByBofPosition(boundSheetRecords);
                     }
-                    output.println();
-                    output.println(
-                            orderedBSRs[sheetIndex].getSheetname() +
-                                    " [" + (sheetIndex+1) + "]:"
-                    );
+
+                    try {
+                        if (currentOutput != null && currentSheetName != null) {
+                            dispatcher.closeStreamForSheet(currentOutput, currentSheetName);
+                        }
+                        currentSheetName = orderedBSRs[sheetIndex].getSheetname();
+                        currentOutput = dispatcher.openStreamForSheet(currentSheetName);
+                    }
+                    catch(FileNotFoundException e) {
+                        System.out.println("Aborting as attempt to write sheet failed");
+                        System.exit(1);
+                    }
                 }
                 break;
 
@@ -291,9 +303,9 @@ public class XlsToCsv implements HSSFListener {
         // If we got something to print out, do so
         if(thisStr != null) {
             if(thisColumn > 0) {
-                output.print(',');
+                currentOutput.print(',');
             }
-            output.print(thisStr);
+            currentOutput.print(thisStr);
         }
 
         // Update column and row count
@@ -309,7 +321,7 @@ public class XlsToCsv implements HSSFListener {
                 // Columns are 0 based
                 if(lastColumnNumber == -1) { lastColumnNumber = 0; }
                 for(int i=lastColumnNumber; i<(minColumns); i++) {
-                    output.print(',');
+                    currentOutput.print(',');
                 }
             }
 
@@ -317,7 +329,7 @@ public class XlsToCsv implements HSSFListener {
             lastColumnNumber = -1;
 
             // End the row
-            output.println();
+            currentOutput.println();
         }
     }
 }
